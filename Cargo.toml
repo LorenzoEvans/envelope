@@ -1,0 +1,15 @@
+[package]
+name = "envelope"
+version = "0.1.0"
+authors = ["arcnemesys <accelerenzo@proton.me>"]
+license = "MIT"
+edition = "2021"
+
+[dependencies]
+crossterm = "0.27.0"
+env_logger = "0.11.3"
+env_perm = "0.1.3"
+globalenv = "0.4.2"
+ratatui = "0.27.0"
+tempfile = "3.12.0"
+terminal_size = "0.3.0"
