@@ -1,4 +1,4 @@
-use envelope::app::{App, AppResult, get_shell_vars};
+use envelope::app::{App, AppResult};
 use envelope::event::{Event, EventHandler};
 use envelope::handler::handle_key_events;
 use envelope::tui::Tui;
