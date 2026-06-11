@@ -32,7 +32,7 @@ impl EventHandler {
     pub fn new() -> Self {
         EventHandler::default()
     }
-        pub fn next(&self) -> AppResult<Event> {
+    pub fn next(&self) -> AppResult<Event> {
         Ok(self.receiver.recv()?)
     }
 }

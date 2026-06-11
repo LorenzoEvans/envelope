@@ -1,8 +1,7 @@
 use crate::app::{ActiveList, App, AppResult, CurrentlyEditing};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use std::fs::{File, OpenOptions};
-use std::io::Write;
-use std::path::PathBuf;
+use std::fs::{read_to_string, write};
+use std::path::{Path, PathBuf};
 
 pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
     if app.searching {
@@ -28,81 +27,69 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
                 app.quit();
             }
         }
-        KeyCode::Char('c') | KeyCode::Char('C') => {
-            if key_event.modifiers == KeyModifiers::CONTROL {
-                app.quit();
-            }
+        KeyCode::Char('c') | KeyCode::Char('C') if key_event.modifiers == KeyModifiers::CONTROL => {
+            app.quit();
         }
-        KeyCode::Char('e') => {
-            if !app.editing {
-                app.editing = true;
-                match app.activated_list {
-                    ActiveList::EnvList => {
-                        let filtered = app.filtered_env_vars();
-                        if app.selected_env_var < filtered.len() {
-                            app.env_var_value = filtered[app.selected_env_var].1.clone();
-                        }
+        KeyCode::Char('e') if !app.editing => {
+            app.editing = true;
+            match app.activated_list {
+                ActiveList::EnvList => {
+                    let filtered = app.filtered_env_vars();
+                    if app.selected_env_var < filtered.len() {
+                        app.env_var_value = filtered[app.selected_env_var].1.clone();
                     }
-                    ActiveList::PathList => {
-                        let filtered = app.filtered_path_dirs();
-                        if app.selected_path_dir < filtered.len() {
-                            app.path_var_edit = filtered[app.selected_path_dir].to_string_lossy().to_string();
-                        }
+                }
+                ActiveList::PathList => {
+                    let filtered = app.filtered_path_dirs();
+                    if app.selected_path_dir < filtered.len() {
+                        app.path_var_edit = filtered[app.selected_path_dir]
+                            .to_string_lossy()
+                            .to_string();
                     }
                 }
             }
         }
-        KeyCode::Char('n') => {
-            if !app.editing {
-                app.creating_new = true;
-                app.env_var_key = String::new();
-                app.env_var_value = String::new();
-                app.currently_editing = Some(CurrentlyEditing::EnvVarName);
-            }
+        KeyCode::Char('n') if !app.editing => {
+            app.creating_new = true;
+            app.env_var_key = String::new();
+            app.env_var_value = String::new();
+            app.currently_editing = Some(CurrentlyEditing::EnvVarName);
         }
-        KeyCode::Char('/') => {
-            if !app.editing {
-                app.searching = true;
-            }
+        KeyCode::Char('/') if !app.editing => {
+            app.searching = true;
         }
-        KeyCode::Char(c) => {
-            if app.editing {
-                match app.activated_list {
-                    ActiveList::EnvList => app.env_var_value.push(c),
-                    ActiveList::PathList => {
-                        app.path_var_edit.push(c);
-                    }
-                }
+        KeyCode::Char(c) if app.editing => match app.activated_list {
+            ActiveList::EnvList => app.env_var_value.push(c),
+            ActiveList::PathList => {
+                app.path_var_edit.push(c);
             }
-        }
-        KeyCode::Backspace => {
-            if app.editing {
-                match app.activated_list {
-                    ActiveList::EnvList => {
-                        app.env_var_value.pop();
-                    }
-                    ActiveList::PathList => {
-                        app.path_var_edit.pop();
-                    }
-                }
+        },
+        KeyCode::Backspace if app.editing => match app.activated_list {
+            ActiveList::EnvList => {
+                app.env_var_value.pop();
             }
-        }
-        KeyCode::Tab => {
-            if !app.editing {
-                app.toggle_active();
+            ActiveList::PathList => {
+                app.path_var_edit.pop();
             }
+        },
+        KeyCode::Tab if !app.editing => {
+            app.toggle_active();
         }
         KeyCode::Down => match app.activated_list {
             ActiveList::EnvList => {
                 let filtered = app.filtered_env_vars();
-                if !app.editing && !filtered.is_empty() && app.selected_env_var < filtered.len() - 1 {
+                if !app.editing && !filtered.is_empty() && app.selected_env_var < filtered.len() - 1
+                {
                     app.selected_env_var += 1;
                     app.env_list_state.select(Some(app.selected_env_var))
                 }
             }
             ActiveList::PathList => {
                 let filtered = app.filtered_path_dirs();
-                if !app.editing && !filtered.is_empty() && app.selected_path_dir < filtered.len() - 1 {
+                if !app.editing
+                    && !filtered.is_empty()
+                    && app.selected_path_dir < filtered.len() - 1
+                {
                     app.selected_path_dir += 1;
                     app.path_list_state.select(Some(app.selected_path_dir))
                 }
@@ -122,32 +109,28 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
                 }
             }
         },
-        KeyCode::Enter => {
-            if app.editing {
-                match app.activated_list {
-                    ActiveList::EnvList => {
-                        let filtered = app.filtered_env_vars();
-                        if app.selected_env_var < filtered.len() {
-                            let key = filtered[app.selected_env_var].0.clone();
-                            if app.shell_env_vars.contains_key(&key) {
-                                app.overwrite = true;
-                            } else {
-                                save_env_var(app, key, app.env_var_value.clone())?;
-                                app.editing = false;
-                            }
-                        }
-                    }
-                    ActiveList::PathList => {
-                        let filtered = app.filtered_path_dirs();
-                        if app.selected_path_dir < filtered.len() {
-                            let new_path = PathBuf::from(app.path_var_edit.clone());
-                            save_path_var(app, new_path)?;
-                            app.editing = false;
-                        }
+        KeyCode::Enter if app.editing => match app.activated_list {
+            ActiveList::EnvList => {
+                let filtered = app.filtered_env_vars();
+                if app.selected_env_var < filtered.len() {
+                    let key = filtered[app.selected_env_var].0.clone();
+                    if app.shell_env_vars.contains_key(&key) {
+                        app.overwrite = true;
+                    } else {
+                        save_env_var(app, key, app.env_var_value.clone())?;
+                        app.editing = false;
                     }
                 }
             }
-        }
+            ActiveList::PathList => {
+                let filtered = app.filtered_path_dirs();
+                if app.selected_path_dir < filtered.len() {
+                    let new_path = PathBuf::from(app.path_var_edit.clone());
+                    save_path_var(app, new_path)?;
+                    app.editing = false;
+                }
+            }
+        },
         _ => {}
     }
     Ok(())
@@ -202,46 +185,41 @@ fn handle_new_var_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
             app.creating_new = false;
             app.currently_editing = None;
         }
-        KeyCode::Enter => {
-            match app.currently_editing {
-                Some(CurrentlyEditing::EnvVarName) => {
-                    if !app.env_var_key.is_empty() {
-                        app.currently_editing = Some(CurrentlyEditing::EnvVarValue);
-                    }
-                }
-                Some(CurrentlyEditing::EnvVarValue) => {
-                    save_env_var(app, app.env_var_key.clone(), app.env_var_value.clone())?;
-                    app.creating_new = false;
-                    app.currently_editing = None;
-                }
-                _ => {}
+        KeyCode::Enter => match app.currently_editing {
+            Some(CurrentlyEditing::EnvVarName) if !app.env_var_key.is_empty() => {
+                app.currently_editing = Some(CurrentlyEditing::EnvVarValue);
             }
-        }
-        KeyCode::Char(c) => {
-            match app.currently_editing {
-                Some(CurrentlyEditing::EnvVarName) => app.env_var_key.push(c),
-                Some(CurrentlyEditing::EnvVarValue) => app.env_var_value.push(c),
-                _ => {}
+            Some(CurrentlyEditing::EnvVarValue) => {
+                save_env_var(app, app.env_var_key.clone(), app.env_var_value.clone())?;
+                app.creating_new = false;
+                app.currently_editing = None;
             }
-        }
-        KeyCode::Backspace => {
-            match app.currently_editing {
-                Some(CurrentlyEditing::EnvVarName) => {
-                    app.env_var_key.pop();
-                }
-                Some(CurrentlyEditing::EnvVarValue) => {
-                    app.env_var_value.pop();
-                }
-                _ => {}
+            _ => {}
+        },
+        KeyCode::Char(c) => match app.currently_editing {
+            Some(CurrentlyEditing::EnvVarName) => app.env_var_key.push(c),
+            Some(CurrentlyEditing::EnvVarValue) => app.env_var_value.push(c),
+            _ => {}
+        },
+        KeyCode::Backspace => match app.currently_editing {
+            Some(CurrentlyEditing::EnvVarName) => {
+                app.env_var_key.pop();
             }
-        }
+            Some(CurrentlyEditing::EnvVarValue) => {
+                app.env_var_value.pop();
+            }
+            _ => {}
+        },
         _ => {}
     }
     Ok(())
 }
 
 fn save_env_var(app: &mut App, key: String, value: String) -> AppResult<()> {
-    // Update local state
+    if !is_valid_env_var_name(&key) {
+        return Err(format!("invalid environment variable name: {key}").into());
+    }
+
     if let Some(pos) = app.env_vars.iter().position(|(k, _)| k == &key) {
         app.env_vars[pos].1 = value.clone();
     } else {
@@ -249,17 +227,12 @@ fn save_env_var(app: &mut App, key: String, value: String) -> AppResult<()> {
     }
     app.shell_env_vars.insert(key.clone(), value.clone());
 
-    // Write to config
-    let mut shell_config = OpenOptions::new().append(true).open(&app.config_path)?;
-    let export_var = format!("export {}=\"{}\"\n", key, value);
-    shell_config.write_all(b"\n")?;
-    shell_config.write_all(export_var.as_bytes())?;
-    
+    upsert_shell_assignment(app, &key, &value)?;
+
     Ok(())
 }
 
 fn save_path_var(app: &mut App, new_path: PathBuf) -> AppResult<()> {
-    // Update local state
     let filtered = app.filtered_path_dirs();
     if app.selected_path_dir < filtered.len() {
         let old_path = filtered[app.selected_path_dir].clone();
@@ -268,55 +241,134 @@ fn save_path_var(app: &mut App, new_path: PathBuf) -> AppResult<()> {
         }
     }
 
-    // Write to config
-    let mut shell_config = OpenOptions::new().append(true).open(&app.config_path)?;
-    let export_var = format!("export PATH=$PATH:{}\n", new_path.to_string_lossy());
-    shell_config.write_all(b"\n")?;
-    shell_config.write_all(export_var.as_bytes())?;
+    append_path_assignment(app, &new_path)?;
 
     Ok(())
 }
 
-pub fn write_to_config(_app: &App, _config_var: &str, _config_file: &mut File) {
-    // This is now handled in save_env_var and save_path_var
+fn upsert_shell_assignment(app: &App, key: &str, value: &str) -> AppResult<()> {
+    let content = read_to_string(&app.config_path).unwrap_or_default();
+    let assignment = format_assignment(&app.shell, key, value);
+    let mut replaced = false;
+    let mut lines = Vec::new();
+
+    for line in content.lines() {
+        if line_assigns_key(line, key) {
+            if !replaced {
+                lines.push(assignment.clone());
+                replaced = true;
+            }
+        } else {
+            lines.push(line.to_string());
+        }
+    }
+
+    if !replaced {
+        if !lines.is_empty() {
+            lines.push(String::new());
+        }
+        lines.push(assignment);
+    }
+
+    write(&app.config_path, finish_lines(lines))?;
+    Ok(())
+}
+
+fn append_path_assignment(app: &App, path: &Path) -> AppResult<()> {
+    let mut content = read_to_string(&app.config_path).unwrap_or_default();
+    if !content.is_empty() && !content.ends_with('\n') {
+        content.push('\n');
+    }
+    if !content.is_empty() {
+        content.push('\n');
+    }
+    content.push_str(&format_path_assignment(&app.shell, &path.to_string_lossy()));
+    content.push('\n');
+    write(&app.config_path, content)?;
+    Ok(())
+}
+
+fn is_valid_env_var_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    matches!(chars.next(), Some('_' | 'A'..='Z' | 'a'..='z'))
+        && chars.all(|c| matches!(c, '_' | 'A'..='Z' | 'a'..='z' | '0'..='9'))
+}
+
+fn format_assignment(shell_config: &str, key: &str, value: &str) -> String {
+    if shell_config == "config.fish" {
+        format!("set -gx {key} {}", shell_quote(value))
+    } else {
+        format!("export {key}={}", shell_quote(value))
+    }
+}
+
+fn format_path_assignment(shell_config: &str, path: &str) -> String {
+    if shell_config == "config.fish" {
+        format!("fish_add_path {}", shell_quote(path))
+    } else {
+        format!("export PATH=\"$PATH\":{}", shell_quote(path))
+    }
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+fn line_assigns_key(line: &str, key: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed
+        .strip_prefix("export ")
+        .is_some_and(|rest| rest.trim_start().starts_with(&format!("{key}=")))
+        || trimmed
+            .strip_prefix("set -gx ")
+            .is_some_and(|rest| rest.trim_start().starts_with(&format!("{key} ")))
+}
+
+fn finish_lines(lines: Vec<String>) -> String {
+    if lines.is_empty() {
+        String::new()
+    } else {
+        format!("{}\n", lines.join("\n"))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::{File, remove_file};
-    use std::io::{Read, Seek, SeekFrom};
     use crate::app::App;
+    use std::fs::{read_to_string, write};
+    use tempfile::TempDir;
 
-    fn create_test_app() -> App {
-        let mut app = App::default();
-        let temp_file = ".test_config";
-        File::create(temp_file).unwrap();
-        app.config_path = PathBuf::from(temp_file);
-        app
+    fn create_test_app() -> (App, TempDir) {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let app = App {
+            config_path: temp_dir.path().join(".test_config"),
+            shell: ".bashrc".to_string(),
+            ..Default::default()
+        };
+        (app, temp_dir)
     }
 
     #[test]
     fn test_save_env_var() {
-        let mut app = create_test_app();
+        let (mut app, _temp_dir) = create_test_app();
         let key = "TEST_VAR".to_string();
         let value = "test_value".to_string();
 
         save_env_var(&mut app, key.clone(), value.clone()).unwrap();
 
-        assert_eq!(app.env_vars.iter().find(|(k, _)| k == &key).unwrap().1, value);
-        
-        let mut file = File::open(&app.config_path).unwrap();
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).unwrap();
-        assert!(contents.contains("export TEST_VAR=\"test_value\""));
+        assert_eq!(
+            app.env_vars.iter().find(|(k, _)| k == &key).unwrap().1,
+            value
+        );
 
-        remove_file(&app.config_path).unwrap();
+        let contents = read_to_string(&app.config_path).unwrap();
+        assert!(contents.contains("export TEST_VAR='test_value'"));
     }
 
     #[test]
     fn test_save_path_var() {
-        let mut app = create_test_app();
+        let (mut app, _temp_dir) = create_test_app();
         app.path_var_dirs = vec![PathBuf::from("/usr/bin")];
         app.selected_path_dir = 0;
         let new_path = PathBuf::from("/new/path");
@@ -325,11 +377,56 @@ mod tests {
 
         assert_eq!(app.path_var_dirs[0], new_path);
 
-        let mut file = File::open(&app.config_path).unwrap();
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).unwrap();
-        assert!(contents.contains("export PATH=$PATH:/new/path"));
+        let contents = read_to_string(&app.config_path).unwrap();
+        assert!(contents.contains("export PATH=\"$PATH\":'/new/path'"));
+    }
 
-        remove_file(&app.config_path).unwrap();
+    #[test]
+    fn test_save_env_var_replaces_existing_assignment() {
+        let (mut app, _temp_dir) = create_test_app();
+        write(
+            &app.config_path,
+            "export TEST_VAR='old'\nexport OTHER='ok'\n",
+        )
+        .unwrap();
+
+        save_env_var(&mut app, "TEST_VAR".to_string(), "new".to_string()).unwrap();
+
+        let contents = read_to_string(&app.config_path).unwrap();
+        assert!(contents.contains("export TEST_VAR='new'"));
+        assert!(contents.contains("export OTHER='ok'"));
+        assert!(!contents.contains("export TEST_VAR='old'"));
+        assert_eq!(contents.matches("export TEST_VAR=").count(), 1);
+    }
+
+    #[test]
+    fn test_save_env_var_rejects_invalid_name() {
+        let (mut app, _temp_dir) = create_test_app();
+
+        let result = save_env_var(&mut app, "1_BAD".to_string(), "value".to_string());
+
+        assert!(result.is_err());
+        assert!(!app.config_path.exists());
+    }
+
+    #[test]
+    fn test_save_env_var_shell_quotes_single_quotes() {
+        let (mut app, _temp_dir) = create_test_app();
+
+        save_env_var(&mut app, "QUOTED".to_string(), "don't split".to_string()).unwrap();
+
+        let contents = read_to_string(&app.config_path).unwrap();
+        assert!(contents.contains("export QUOTED='don'\\''t split'"));
+    }
+
+    #[test]
+    fn test_save_env_var_uses_fish_assignment() {
+        let (mut app, _temp_dir) = create_test_app();
+        app.shell = "config.fish".to_string();
+
+        save_env_var(&mut app, "FISH_VAR".to_string(), "value".to_string()).unwrap();
+
+        let contents = read_to_string(&app.config_path).unwrap();
+        assert!(contents.contains("set -gx FISH_VAR 'value'"));
     }
 }

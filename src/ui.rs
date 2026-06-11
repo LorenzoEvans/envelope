@@ -1,12 +1,12 @@
 use ratatui::prelude::*;
 use ratatui::{
     layout::{Constraint, Layout, Rect},
-    style::{Color, Style, Modifier},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Clear},
+    style::{Color, Modifier, Style},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
     Frame,
 };
 
-use crate::app::{App, ActiveList, CurrentlyEditing};
+use crate::app::{ActiveList, App, CurrentlyEditing};
 
 pub fn render(app: &mut App, f: &mut Frame) {
     let size = f.size();
@@ -30,17 +30,22 @@ pub fn render(app: &mut App, f: &mut Frame) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(1)
-        .constraints([
-            Constraint::Length(3), // Search bar
-            Constraint::Min(10),   // Main lists
-            Constraint::Length(6), // Editors
-            Constraint::Length(3), // Help/Footer
-        ].as_ref())
+        .constraints(
+            [
+                Constraint::Length(3), // Search bar
+                Constraint::Min(10),   // Main lists
+                Constraint::Length(6), // Editors
+                Constraint::Length(3), // Help/Footer
+            ]
+            .as_ref(),
+        )
         .split(size);
 
     // 1. Search Bar
     let search_style = if app.searching {
-        Style::default().fg(highlight_color).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(highlight_color)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(border_color)
     };
@@ -50,7 +55,12 @@ pub fn render(app: &mut App, f: &mut Frame) {
         format!(" {} ", app.search_query)
     };
     let search_bar = Paragraph::new(search_text)
-        .block(Block::default().borders(Borders::ALL).title(" Search ").border_style(search_style))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Search ")
+                .border_style(search_style),
+        )
         .style(Style::default().fg(text_color));
     f.render_widget(search_bar, chunks[0]);
 
@@ -62,7 +72,9 @@ pub fn render(app: &mut App, f: &mut Frame) {
 
     // Env List
     let env_border_style = if app.activated_list == ActiveList::EnvList {
-        Style::default().fg(highlight_color).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(highlight_color)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(border_color)
     };
@@ -70,32 +82,40 @@ pub fn render(app: &mut App, f: &mut Frame) {
     let env_items: Vec<ListItem> = env_vars
         .iter()
         .map(|(key, value)| {
-            ListItem::new(format!(" {}: {}", key, value))
-                .style(Style::default().fg(text_color))
+            ListItem::new(format!(" {}: {}", key, value)).style(Style::default().fg(text_color))
         })
         .collect();
     let env_list = List::new(env_items)
-        .block(Block::default().borders(Borders::ALL).title(" Environment Variables ").border_style(env_border_style))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Environment Variables ")
+                .border_style(env_border_style),
+        )
         .highlight_symbol(" \u{25b6} ")
         .highlight_style(Style::default().bg(accent_color).fg(Color::White));
     f.render_stateful_widget(env_list, list_chunks[0], &mut app.env_list_state);
 
     // Path List
     let path_border_style = if app.activated_list == ActiveList::PathList {
-        Style::default().fg(highlight_color).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(highlight_color)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(border_color)
     };
     let path_dirs = app.filtered_path_dirs();
     let path_items: Vec<ListItem> = path_dirs
         .iter()
-        .map(|path| {
-            ListItem::new(format!(" {:?}", path))
-                .style(Style::default().fg(text_color))
-        })
+        .map(|path| ListItem::new(format!(" {:?}", path)).style(Style::default().fg(text_color)))
         .collect();
     let path_list = List::new(path_items)
-        .block(Block::default().borders(Borders::ALL).title(" PATH Components ").border_style(path_border_style))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" PATH Components ")
+                .border_style(path_border_style),
+        )
         .highlight_symbol(" \u{25b6} ")
         .highlight_style(Style::default().bg(accent_color).fg(Color::White));
     f.render_stateful_widget(path_list, list_chunks[1], &mut app.path_list_state);
@@ -106,15 +126,34 @@ pub fn render(app: &mut App, f: &mut Frame) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(chunks[2]);
 
-    let env_edit_title = if app.editing && app.activated_list == ActiveList::EnvList { " Editing Value " } else { " Value " };
-    let env_edit_val = if app.editing && app.activated_list == ActiveList::EnvList { app.env_var_value.as_str() } else { app.selected_value() };
+    let env_edit_title = if app.editing && app.activated_list == ActiveList::EnvList {
+        " Editing Value "
+    } else {
+        " Value "
+    };
+    let env_edit_val = if app.editing && app.activated_list == ActiveList::EnvList {
+        app.env_var_value.as_str()
+    } else {
+        app.selected_value()
+    };
     let env_editor = Paragraph::new(env_edit_val)
-        .block(Block::default().borders(Borders::ALL).title(env_edit_title).border_style(env_border_style))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(env_edit_title)
+                .border_style(env_border_style),
+        )
         .style(Style::default().fg(text_color));
     f.render_widget(env_editor, editor_chunks[0]);
 
-    let path_edit_title = if app.editing && app.activated_list == ActiveList::PathList { " Editing Path " } else { " Selected Path " };
-    let path_edit_val = if app.editing && app.activated_list == ActiveList::PathList { app.path_var_edit.as_str() } else { 
+    let path_edit_title = if app.editing && app.activated_list == ActiveList::PathList {
+        " Editing Path "
+    } else {
+        " Selected Path "
+    };
+    let path_edit_val = if app.editing && app.activated_list == ActiveList::PathList {
+        app.path_var_edit.as_str()
+    } else {
         if app.selected_path_dir < path_dirs.len() {
             path_dirs[app.selected_path_dir].to_str().unwrap_or("")
         } else {
@@ -122,14 +161,23 @@ pub fn render(app: &mut App, f: &mut Frame) {
         }
     };
     let path_editor = Paragraph::new(path_edit_val)
-        .block(Block::default().borders(Borders::ALL).title(path_edit_title).border_style(path_border_style))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(path_edit_title)
+                .border_style(path_border_style),
+        )
         .style(Style::default().fg(text_color));
     f.render_widget(path_editor, editor_chunks[1]);
 
     // 4. Footer
     let help_text = " Tab: Switch | /: Search | n: New | e: Edit | Enter: Save | q: Quit ";
     let footer = Paragraph::new(help_text)
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(border_color)))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(border_color)),
+        )
         .alignment(Alignment::Center)
         .style(Style::default().fg(text_color));
     f.render_widget(footer, chunks[3]);
@@ -150,32 +198,51 @@ fn render_overwrite_modal(f: &mut Frame, warning_color: Color, text_color: Color
     let block = Block::default()
         .title(" CONFIRM OVERWRITE ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(warning_color).add_modifier(Modifier::BOLD))
+        .border_style(
+            Style::default()
+                .fg(warning_color)
+                .add_modifier(Modifier::BOLD),
+        )
         .bg(Color::Rgb(40, 0, 10));
-    
+
     let text = vec![
         Line::from("This variable already exists in your shell config."),
         Line::from("Do you want to overwrite it with the new value?"),
         Line::from(""),
-        Line::from(Span::styled(" (y) Yes  /  (n) No ", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))),
+        Line::from(Span::styled(
+            " (y) Yes  /  (n) No ",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )),
     ];
     let paragraph = Paragraph::new(text)
         .block(block)
         .alignment(Alignment::Center)
         .style(Style::default().fg(text_color));
-    
+
     f.render_widget(paragraph, area);
 }
 
-fn render_new_var_modal(app: &App, f: &mut Frame, highlight_color: Color, border_color: Color, text_color: Color) {
+fn render_new_var_modal(
+    app: &App,
+    f: &mut Frame,
+    highlight_color: Color,
+    border_color: Color,
+    text_color: Color,
+) {
     let area = centered_rect(70, 40, f.size());
     f.render_widget(Clear, area);
     let block = Block::default()
         .title(" CREATE NEW VARIABLE ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(highlight_color).add_modifier(Modifier::BOLD))
+        .border_style(
+            Style::default()
+                .fg(highlight_color)
+                .add_modifier(Modifier::BOLD),
+        )
         .bg(Color::Rgb(20, 10, 40));
-    
+
     f.render_widget(block, area);
 
     let chunks = Layout::default()
@@ -194,7 +261,12 @@ fn render_new_var_modal(app: &App, f: &mut Frame, highlight_color: Color, border
         Style::default().fg(border_color)
     };
     let name_input = Paragraph::new(app.env_var_key.as_str())
-        .block(Block::default().borders(Borders::ALL).title(" Variable Name ").border_style(name_style))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Variable Name ")
+                .border_style(name_style),
+        )
         .style(Style::default().fg(text_color));
     f.render_widget(name_input, chunks[0]);
 
@@ -204,7 +276,12 @@ fn render_new_var_modal(app: &App, f: &mut Frame, highlight_color: Color, border
         Style::default().fg(border_color)
     };
     let val_input = Paragraph::new(app.env_var_value.as_str())
-        .block(Block::default().borders(Borders::ALL).title(" Variable Value ").border_style(val_style))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Variable Value ")
+                .border_style(val_style),
+        )
         .style(Style::default().fg(text_color));
     f.render_widget(val_input, chunks[1]);
 

@@ -1,14 +1,60 @@
-## Overview
+## Envelope
 
 ![A terminal with a vertically split list of environment variables and path components](./assets/envelop.png)
 
-Envelope is a very simple application, that allows for viewing and updating the environment variables, and viewing the components of the path variable on your system. The main driver behind the development of Envelope was to further my understanding of:
-- [Ratatui](https://ratatui.rs/), a library for building TUIs, that underlies *more than a few* [exceptional applications](https://github.com/ratatui/awesome-ratatui?tab=readme-ov-file#-apps).
-- Terminals/shells, which have an air of opaqueness and mystique around them, yet are essential to the craft of programming.
-- Immediate mode, an API pattern for GUI development that differs meaningfully from the Retained mode pattern, which is much more commonly used/experienced.
+Envelope is a terminal UI for inspecting environment variables, searching them, creating or editing shell-persisted variables, and viewing PATH entries.
 
-Currently, I'm exploring ways to make Envelope a bit more, well, useful, and am considering implementing some, perhaps all of the following features:
-- Searching for specific environment variable names and values.
-- Creating new environment variables and exporting them.
-- [In Progress] Editing/writing to .bashrc to set environment variables for future shell sessions.
-Editing/writing to /etc/environment to set environment variables system-wide.
+Envelope writes changes to your detected shell config file so future shell sessions can use them. For bash-like shells this is usually `~/.bashrc`, `~/.zshrc`, `~/.bash_profile`, or `~/.profile`. For fish, Envelope writes simple `set -gx` assignments to `~/.config/fish/config.fish`.
+
+## Install
+
+With Cargo:
+
+```sh
+cargo install envelope
+```
+
+From GitHub releases, download the binary for your platform, place it somewhere on your PATH, and run:
+
+```sh
+envelope
+```
+
+## Controls
+
+| Key | Action |
+| --- | --- |
+| `Tab` | Switch between environment variables and PATH entries |
+| `/` | Search names, values, and PATH entries |
+| `n` | Create a new environment variable |
+| `e` | Edit the selected variable value or PATH entry |
+| `Enter` | Save the current edit or advance the new-variable form |
+| `Esc` | Cancel the active edit/search/modal |
+| `q` | Quit |
+| `Ctrl-C` | Quit |
+
+## Persistence And Safety
+
+Environment variable names must start with a letter or `_` and may contain only letters, numbers, and `_`.
+
+When editing or creating variables, Envelope writes shell-quoted values and replaces existing matching assignments instead of appending duplicate stale exports.
+
+PATH edits update the current TUI list and append a future-shell PATH entry to your shell config. Envelope does not currently rewrite complex existing PATH expressions.
+
+## Development
+
+Run the local quality gates:
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
+cargo package --list
+```
+
+The GitHub release workflow builds Linux, macOS, and Windows binaries when a `v*` tag is pushed. Publish to crates.io after verifying package contents:
+
+```sh
+cargo package --list
+cargo publish
+```

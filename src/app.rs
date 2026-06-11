@@ -180,18 +180,18 @@ pub enum CurrentlyEditing {
 
 fn get_shell_config() -> Result<String, Box<dyn error::Error>> {
     if let Ok(shell_path) = std::env::var("SHELL") {
-        let shell_name = shell_path.split('/').last().unwrap_or("");
+        let shell_name = shell_path.split('/').next_back().unwrap_or("");
         match shell_name {
             "bash" => return Ok(".bashrc".to_string()),
             "zsh" => return Ok(".zshrc".to_string()),
-            "fish" => return Ok("config.fish".to_string()), // Simplified
+            "fish" => return Ok("config.fish".to_string()),
             _ => {}
         }
     }
 
     let home = std::env::var("HOME")?;
     let home_path = std::path::PathBuf::from(home);
-    
+
     let configs = [".bashrc", ".zshrc", ".bash_profile", ".profile"];
     for config in configs {
         if home_path.join(config).exists() {
@@ -226,13 +226,23 @@ pub fn get_shell_vars() -> Result<HashMap<String, String>, Box<dyn error::Error>
 
     for line in config_file_contents.lines() {
         let line = line.trim();
-        if line.starts_with("export") {
-            if let Some(rest) = line.strip_prefix("export ") {
-                if let Some((env_var_name, env_var_value)) = rest.split_once('=') {
-                    let name = env_var_name.trim().to_owned();
-                    let value = env_var_value.trim().trim_matches('\"').trim_matches('\'').to_owned();
-                    config_map.insert(name, value);
-                }
+        if let Some(rest) = line.strip_prefix("export ") {
+            if let Some((env_var_name, env_var_value)) = rest.split_once('=') {
+                let name = env_var_name.trim().to_owned();
+                let value = env_var_value
+                    .trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .to_owned();
+                config_map.insert(name, value);
+            }
+        } else if let Some(rest) = line.strip_prefix("set -gx ") {
+            let mut parts = rest.splitn(2, char::is_whitespace);
+            if let (Some(name), Some(value)) = (parts.next(), parts.next()) {
+                config_map.insert(
+                    name.to_owned(),
+                    value.trim().trim_matches('"').trim_matches('\'').to_owned(),
+                );
             }
         }
     }
@@ -245,9 +255,11 @@ mod tests {
 
     #[test]
     fn test_toggle_active_from_env_list() {
-        let mut app = App::default();
-        app.activated_list = ActiveList::EnvList;
-        app.list_index = 0;
+        let mut app = App {
+            activated_list: ActiveList::EnvList,
+            list_index: 0,
+            ..Default::default()
+        };
 
         app.toggle_active();
 
@@ -257,9 +269,11 @@ mod tests {
 
     #[test]
     fn test_toggle_active_from_path_list() {
-        let mut app = App::default();
-        app.activated_list = ActiveList::PathList;
-        app.list_index = 1;
+        let mut app = App {
+            activated_list: ActiveList::PathList,
+            list_index: 1,
+            ..Default::default()
+        };
 
         app.toggle_active();
 
@@ -269,9 +283,11 @@ mod tests {
 
     #[test]
     fn test_multiple_toggles() {
-        let mut app = App::default();
-        app.activated_list = ActiveList::EnvList;
-        app.list_index = 0;
+        let mut app = App {
+            activated_list: ActiveList::EnvList,
+            list_index: 0,
+            ..Default::default()
+        };
 
         app.toggle_active();
         app.toggle_active();
@@ -282,11 +298,17 @@ mod tests {
 
     #[test]
     fn test_toggle_active_updates_list_states() {
-        let mut app = App::default();
-        app.activated_list = ActiveList::EnvList;
-        app.list_index = 0;
-        app.env_list_state.select(Some(3));
-        app.path_list_state.select(Some(2));
+        let mut env_list_state = ratatui::widgets::ListState::default();
+        env_list_state.select(Some(3));
+        let mut path_list_state = ratatui::widgets::ListState::default();
+        path_list_state.select(Some(2));
+        let mut app = App {
+            activated_list: ActiveList::EnvList,
+            list_index: 0,
+            env_list_state,
+            path_list_state,
+            ..Default::default()
+        };
 
         app.toggle_active();
 

@@ -13,15 +13,32 @@ fn main() -> AppResult<()> {
     let mut tui = Tui::new(terminal, events);
     tui.init()?;
 
-    while app.running {
-        tui.draw(&mut app)?;
-
-        match tui.events.next()? {
-            Event::Key(key_event) => handle_key_events(key_event, &mut app)?,
-            Event::Mouse(_) => {}
-            Event::Resize(_, _) => {}
+    let app_result = loop {
+        if let Err(err) = tui.draw(&mut app) {
+            break Err(err);
         }
-    }
-    tui.exit()?;
+
+        let event = match tui.events.next() {
+            Ok(event) => event,
+            Err(err) => break Err(err),
+        };
+
+        let handle_result = match event {
+            Event::Key(key_event) => handle_key_events(key_event, &mut app),
+            Event::Mouse(_) | Event::Resize(_, _) => Ok(()),
+        };
+
+        if let Err(err) = handle_result {
+            break Err(err);
+        }
+
+        if !app.running {
+            break Ok(());
+        }
+    };
+
+    let exit_result = tui.exit();
+    app_result?;
+    exit_result?;
     Ok(())
 }
