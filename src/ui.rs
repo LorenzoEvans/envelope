@@ -2,7 +2,7 @@ use ratatui::prelude::*;
 use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Frame,
 };
 
@@ -12,12 +12,13 @@ pub fn render(app: &mut App, f: &mut Frame) {
     let size = f.size();
 
     // Define Theme Colors
-    let bg_color = Color::Rgb(20, 10, 30); // Very dark purple
-    let border_color = Color::Rgb(100, 50, 150); // Violet
-    let highlight_color = Color::Rgb(180, 100, 240); // Bright violet
-    let accent_color = Color::Rgb(130, 0, 130); // Dark Magenta
-    let text_color = Color::Rgb(220, 200, 255); // Pale violet
-    let warning_color = Color::Rgb(255, 50, 100); // Pinkish red
+    let bg_color = Color::Rgb(18, 24, 30);
+    let border_color = Color::Rgb(82, 104, 116);
+    let highlight_color = Color::Rgb(82, 196, 182);
+    let accent_color = Color::Rgb(32, 92, 102);
+    let text_color = Color::Rgb(218, 226, 228);
+    let warning_color = Color::Rgb(242, 166, 90);
+    let error_color = Color::Rgb(238, 112, 112);
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -143,7 +144,8 @@ pub fn render(app: &mut App, f: &mut Frame) {
                 .title(env_edit_title)
                 .border_style(env_border_style),
         )
-        .style(Style::default().fg(text_color));
+        .style(Style::default().fg(text_color))
+        .wrap(Wrap { trim: false });
     f.render_widget(env_editor, editor_chunks[0]);
 
     let path_edit_title = if app.editing && app.activated_list == ActiveList::PathList {
@@ -167,11 +169,27 @@ pub fn render(app: &mut App, f: &mut Frame) {
                 .title(path_edit_title)
                 .border_style(path_border_style),
         )
-        .style(Style::default().fg(text_color));
+        .style(Style::default().fg(text_color))
+        .wrap(Wrap { trim: false });
     f.render_widget(path_editor, editor_chunks[1]);
 
     // 4. Footer
-    let help_text = " Tab: Switch | /: Search | n: New | e: Edit | Enter: Save | q: Quit ";
+    let help_text = if !app.status_message.is_empty() {
+        app.status_message.as_str()
+    } else if app.searching {
+        "Type to filter, Enter to keep the filter, Esc to clear"
+    } else if app.editing {
+        "Enter: Save   Esc: Cancel"
+    } else {
+        "Tab: Switch   /: Search   n: New   e: Edit   q: Quit"
+    };
+    let footer_style = if app.status_is_error {
+        Style::default()
+            .fg(error_color)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        Style::default().fg(text_color)
+    };
     let footer = Paragraph::new(help_text)
         .block(
             Block::default()
@@ -179,7 +197,7 @@ pub fn render(app: &mut App, f: &mut Frame) {
                 .border_style(Style::default().fg(border_color)),
         )
         .alignment(Alignment::Center)
-        .style(Style::default().fg(text_color));
+        .style(footer_style);
     f.render_widget(footer, chunks[3]);
 
     // Overlays

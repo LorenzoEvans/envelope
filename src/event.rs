@@ -56,7 +56,7 @@ impl Default for EventHandler {
                         CrosstermEvent::Resize(w, h) => sender.send(Event::Resize(w, h)),
                         CrosstermEvent::FocusGained => Ok(()),
                         CrosstermEvent::FocusLost => Ok(()),
-                        CrosstermEvent::Paste(_) => unimplemented!(),
+                        CrosstermEvent::Paste(_) => Ok(()),
                     }
                     .expect("failed to send terminal event")
                 }

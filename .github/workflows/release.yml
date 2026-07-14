@@ -28,10 +28,6 @@ jobs:
             os: macos-latest
             binary: envelope
             artifact: envelope-macos-aarch64
-          - name: windows-x86_64
-            os: windows-latest
-            binary: envelope.exe
-            artifact: envelope-windows-x86_64.exe
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

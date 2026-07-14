@@ -52,6 +52,10 @@ pub struct App {
     pub searching: bool,
     /// Is creating a new variable
     pub creating_new: bool,
+    /// Status text shown in the footer.
+    pub status_message: String,
+    /// Whether the current status should be styled as an error.
+    pub status_is_error: bool,
 }
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ActiveList {
@@ -105,6 +109,8 @@ impl Default for App {
             search_query: String::new(),
             searching: false,
             creating_new: false,
+            status_message: String::new(),
+            status_is_error: false,
         }
     }
 }
@@ -113,11 +119,11 @@ impl App {
         App::default()
     }
     pub fn selected_value(&self) -> &str {
-        if self.selected_env_var < self.env_vars.len() {
-            &self.env_vars[self.selected_env_var].1
-        } else {
-            ""
-        }
+        let filtered = self.filtered_env_vars();
+        let selected_key = filtered.get(self.selected_env_var).map(|(key, _)| key);
+        selected_key
+            .and_then(|key| self.env_vars.iter().find(|(name, _)| name == key))
+            .map_or("", |(_, value)| value.as_str())
     }
 
     pub fn filtered_env_vars(&self) -> Vec<(String, String)> {
@@ -153,6 +159,16 @@ impl App {
 
     pub fn quit(&mut self) {
         self.running = false;
+    }
+
+    pub fn set_status(&mut self, message: impl Into<String>) {
+        self.status_message = message.into();
+        self.status_is_error = false;
+    }
+
+    pub fn set_error(&mut self, message: impl Into<String>) {
+        self.status_message = message.into();
+        self.status_is_error = true;
     }
 
     pub fn toggle_active(&mut self) {
@@ -323,5 +339,23 @@ mod tests {
         assert_eq!(app.list_index, 0);
         assert_eq!(app.env_list_state.selected(), Some(3));
         assert_eq!(app.path_list_state.selected(), Some(2));
+    }
+
+    #[test]
+    fn selected_value_uses_filtered_selection() {
+        let mut app = App {
+            env_vars: vec![
+                ("PATH".to_string(), "/usr/bin".to_string()),
+                ("EDITOR".to_string(), "vim".to_string()),
+            ],
+            search_query: "edit".to_string(),
+            selected_env_var: 0,
+            ..Default::default()
+        };
+
+        assert_eq!(app.selected_value(), "vim");
+
+        app.search_query = "missing".to_string();
+        assert_eq!(app.selected_value(), "");
     }
 }

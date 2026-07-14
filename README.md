@@ -1,60 +1,60 @@
-## Envelope
+# Envelope
 
-![A terminal with a vertically split list of environment variables and path components](./assets/envelop.png)
+![Envelope terminal interface](./assets/envelop.png)
 
-Envelope is a terminal UI for inspecting environment variables, searching them, creating or editing shell-persisted variables, and viewing PATH entries.
-
-Envelope writes changes to your detected shell config file so future shell sessions can use them. For bash-like shells this is usually `~/.bashrc`, `~/.zshrc`, `~/.bash_profile`, or `~/.profile`. For fish, Envelope writes simple `set -gx` assignments to `~/.config/fish/config.fish`.
+Envelope is a focused terminal UI for understanding and maintaining the environment that your shell exposes. It puts environment variables and PATH entries side by side, with search, editing, and shell-config persistence in one workflow.
 
 ## Install
 
-With Cargo:
+Install from crates.io:
 
 ```sh
 cargo install envelope
 ```
 
-From GitHub releases, download the binary for your platform, place it somewhere on your PATH, and run:
+Or download a Linux or macOS binary from [GitHub Releases](https://github.com/LorenzoEvans/envelope/releases).
+
+Run it from a shell:
 
 ```sh
 envelope
 ```
 
+Envelope is Unix-first and supports bash, zsh, and fish configuration files. It detects the active shell and writes to the matching user configuration file when one is available.
+
 ## Controls
 
 | Key | Action |
 | --- | --- |
-| `Tab` | Switch between environment variables and PATH entries |
+| `Tab` | Switch between variables and PATH |
 | `/` | Search names, values, and PATH entries |
-| `n` | Create a new environment variable |
-| `e` | Edit the selected variable value or PATH entry |
-| `Enter` | Save the current edit or advance the new-variable form |
-| `Esc` | Cancel the active edit/search/modal |
-| `q` | Quit |
-| `Ctrl-C` | Quit |
+| `n` | Create a variable |
+| `e` | Edit the selected value or PATH entry |
+| `Enter` | Advance a form or save an edit |
+| `Esc` | Cancel the active interaction |
+| `q` / `Ctrl-C` | Quit |
 
-## Persistence And Safety
+## Persistence
 
-Environment variable names must start with a letter or `_` and may contain only letters, numbers, and `_`.
+Edits are applied to the current session view and persisted to the detected shell config only after saving. Envelope preserves unrelated lines, replaces matching variable assignments, quotes values for shell use, and writes through a temporary file before replacing the config.
 
-When editing or creating variables, Envelope writes shell-quoted values and replaces existing matching assignments instead of appending duplicate stale exports.
+PATH edits update the selected entry and append a future-shell PATH assignment. Complex existing PATH expressions are preserved rather than rewritten. Always review the displayed config file before relying on a change in a new shell session.
 
-PATH edits update the current TUI list and append a future-shell PATH entry to your shell config. Envelope does not currently rewrite complex existing PATH expressions.
+## Roadmap
+
+- Fuzzy search and richer filtering
+- Delete variables and PATH entries
+- Import and export environment snapshots
+- Persistent system-wide configuration support
 
 ## Development
 
-Run the local quality gates:
-
 ```sh
 cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-features
-cargo package --list
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
+cargo doc --workspace --all-features --no-deps
+cargo package --list --locked
 ```
 
-The GitHub release workflow builds Linux, macOS, and Windows binaries when a `v*` tag is pushed. Publish to crates.io after verifying package contents:
-
-```sh
-cargo package --list
-cargo publish
-```
+Envelope is built with Rust, Ratatui, and Crossterm. Contributions should preserve the small, testable application core and keep shell configuration writes conservative.

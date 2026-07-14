@@ -1,6 +1,6 @@
 use crate::app::{ActiveList, App, AppResult, CurrentlyEditing};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use std::fs::{read_to_string, write};
+use std::fs::{create_dir_all, read_to_string, rename, write};
 use std::path::{Path, PathBuf};
 
 pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
@@ -117,8 +117,13 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
                     if app.shell_env_vars.contains_key(&key) {
                         app.overwrite = true;
                     } else {
-                        save_env_var(app, key, app.env_var_value.clone())?;
-                        app.editing = false;
+                        match save_env_var(app, key, app.env_var_value.clone()) {
+                            Ok(()) => {
+                                app.editing = false;
+                                app.set_status("Environment variable saved");
+                            }
+                            Err(err) => app.set_error(err.to_string()),
+                        }
                     }
                 }
             }
@@ -126,8 +131,13 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
                 let filtered = app.filtered_path_dirs();
                 if app.selected_path_dir < filtered.len() {
                     let new_path = PathBuf::from(app.path_var_edit.clone());
-                    save_path_var(app, new_path)?;
-                    app.editing = false;
+                    match save_path_var(app, new_path) {
+                        Ok(()) => {
+                            app.editing = false;
+                            app.set_status("PATH entry saved");
+                        }
+                        Err(err) => app.set_error(err.to_string()),
+                    }
                 }
             }
         },
@@ -166,7 +176,11 @@ fn handle_overwrite_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> 
             let filtered = app.filtered_env_vars();
             if app.selected_env_var < filtered.len() {
                 let key = filtered[app.selected_env_var].0.clone();
-                save_env_var(app, key, app.env_var_value.clone())?;
+                if let Err(err) = save_env_var(app, key, app.env_var_value.clone()) {
+                    app.set_error(err.to_string());
+                } else {
+                    app.set_status("Environment variable saved");
+                }
             }
             app.overwrite = false;
             app.editing = false;
@@ -190,9 +204,14 @@ fn handle_new_var_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
                 app.currently_editing = Some(CurrentlyEditing::EnvVarValue);
             }
             Some(CurrentlyEditing::EnvVarValue) => {
-                save_env_var(app, app.env_var_key.clone(), app.env_var_value.clone())?;
-                app.creating_new = false;
-                app.currently_editing = None;
+                match save_env_var(app, app.env_var_key.clone(), app.env_var_value.clone()) {
+                    Ok(()) => {
+                        app.creating_new = false;
+                        app.currently_editing = None;
+                        app.set_status("Environment variable created");
+                    }
+                    Err(err) => app.set_error(err.to_string()),
+                }
             }
             _ => {}
         },
@@ -220,28 +239,29 @@ fn save_env_var(app: &mut App, key: String, value: String) -> AppResult<()> {
         return Err(format!("invalid environment variable name: {key}").into());
     }
 
+    upsert_shell_assignment(app, &key, &value)?;
+
     if let Some(pos) = app.env_vars.iter().position(|(k, _)| k == &key) {
         app.env_vars[pos].1 = value.clone();
     } else {
         app.env_vars.push((key.clone(), value.clone()));
     }
-    app.shell_env_vars.insert(key.clone(), value.clone());
-
-    upsert_shell_assignment(app, &key, &value)?;
+    app.shell_env_vars.insert(key, value);
 
     Ok(())
 }
 
 fn save_path_var(app: &mut App, new_path: PathBuf) -> AppResult<()> {
     let filtered = app.filtered_path_dirs();
-    if app.selected_path_dir < filtered.len() {
-        let old_path = filtered[app.selected_path_dir].clone();
+    let old_path = filtered.get(app.selected_path_dir).cloned();
+
+    append_path_assignment(app, &new_path)?;
+
+    if let Some(old_path) = old_path {
         if let Some(pos) = app.path_var_dirs.iter().position(|p| p == &old_path) {
             app.path_var_dirs[pos] = new_path.clone();
         }
     }
-
-    append_path_assignment(app, &new_path)?;
 
     Ok(())
 }
@@ -270,7 +290,7 @@ fn upsert_shell_assignment(app: &App, key: &str, value: &str) -> AppResult<()> {
         lines.push(assignment);
     }
 
-    write(&app.config_path, finish_lines(lines))?;
+    write_config(app, &finish_lines(lines))?;
     Ok(())
 }
 
@@ -284,7 +304,27 @@ fn append_path_assignment(app: &App, path: &Path) -> AppResult<()> {
     }
     content.push_str(&format_path_assignment(&app.shell, &path.to_string_lossy()));
     content.push('\n');
-    write(&app.config_path, content)?;
+    write_config(app, &content)?;
+    Ok(())
+}
+
+fn write_config(app: &App, content: &str) -> AppResult<()> {
+    if let Some(parent) = app
+        .config_path
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+    {
+        create_dir_all(parent)?;
+    }
+
+    let temp_path = app
+        .config_path
+        .with_extension(format!("envelope-{}.tmp", std::process::id()));
+    write(&temp_path, content)?;
+    if let Err(err) = rename(&temp_path, &app.config_path) {
+        let _ = std::fs::remove_file(&temp_path);
+        return Err(err.into());
+    }
     Ok(())
 }
 
@@ -428,5 +468,34 @@ mod tests {
 
         let contents = read_to_string(&app.config_path).unwrap();
         assert!(contents.contains("set -gx FISH_VAR 'value'"));
+    }
+
+    #[test]
+    fn test_save_env_var_creates_missing_parent_directory() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_path = temp_dir.path().join("nested").join("config");
+        let mut app = App {
+            config_path,
+            shell: ".bashrc".to_string(),
+            ..Default::default()
+        };
+
+        save_env_var(&mut app, "NESTED".to_string(), "value".to_string()).unwrap();
+
+        assert!(app.config_path.exists());
+    }
+
+    #[test]
+    fn test_save_env_var_does_not_update_memory_when_write_fails() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut app = App {
+            config_path: temp_dir.path().to_path_buf(),
+            shell: ".bashrc".to_string(),
+            ..Default::default()
+        };
+
+        assert!(save_env_var(&mut app, "FAILED".to_string(), "value".to_string()).is_err());
+        assert!(!app.env_vars.iter().any(|(key, _)| key == "FAILED"));
+        assert!(!app.shell_env_vars.contains_key("FAILED"));
     }
 }
